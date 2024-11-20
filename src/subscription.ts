@@ -14,6 +14,7 @@ export class JetstreamSubscription {
     const cursor = await sub.getCursor()
     const sevenDaysAgoCursor = (Date.now() * 1000) - 604_800_000_000;
     console.log(sevenDaysAgoCursor);
+    console.log("Db cursor", cursor)
     sub.jetstream = new Jetstream({
       endpoint: jetstreamUrl,
       wantedCollections: ["app.bsky.feed.post"],
@@ -25,6 +26,7 @@ export class JetstreamSubscription {
       console.log("current cursor", sub.jetstream.cursor)
       sub.intervalId = setInterval(async () => {
         if (!sub.jetstream.cursor) return
+        console.log("updating cursor", sub.jetstream.cursor)
         await sub.updateCursor(sub.jetstream.cursor)
         console.log("current cursor", sub.jetstream.cursor)
       }, 60_000)
@@ -54,11 +56,19 @@ export class JetstreamSubscription {
   }
 
   async updateCursor(cursor: number) {
-    await this.db
-      .updateTable('sub_state')
-      .set({ cursor })
-      .where('service', '=', this.jetstreamUrl)
+    const cur = await this.getCursor();
+    if (!cur) {
+      await this.db
+      .insertInto('sub_state')
+      .values({ cursor, service: this.jetstreamUrl })
       .execute()
+    } else {
+      await this.db
+        .updateTable('sub_state')
+        .set({ cursor })
+        .where('service', '=', this.jetstreamUrl)
+        .execute()
+    }
   }
 
   async getCursor(): Promise<{ cursor?: number }> {
